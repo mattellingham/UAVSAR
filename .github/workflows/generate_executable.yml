@@ -25,10 +25,10 @@ jobs:
       - name: install LLVM
         run: choco install llvm -y
 
-      - name: install GDAL via vcpkg
+      - name: install dependencies via vcpkg
         run: |
-          vcpkg install gdal:x64-windows
-          # gdal-sys requires gdal_i.lib but vcpkg names it gdal.lib - rename it
+          vcpkg install gdal:x64-windows proj:x64-windows sqlite3:x64-windows
+          # gdal-sys requires gdal_i.lib but vcpkg names it gdal.lib - copy it
           copy C:\vcpkg\installed\x64-windows\lib\gdal.lib C:\vcpkg\installed\x64-windows\lib\gdal_i.lib
 
       - name: set environment variables
@@ -37,6 +37,9 @@ jobs:
           echo "GDAL_HOME=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
           echo "GDAL_LIB_DIR=C:\vcpkg\installed\x64-windows\lib" >> $env:GITHUB_ENV
           echo "GDAL_INCLUDE_DIR=C:\vcpkg\installed\x64-windows\include" >> $env:GITHUB_ENV
+          echo "PROJ_LIB=C:\vcpkg\installed\x64-windows\share\proj" >> $env:GITHUB_ENV
+          echo "PROJ_ROOT=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
+          echo "SQLITE3_LIB_DIR=C:\vcpkg\installed\x64-windows\lib" >> $env:GITHUB_ENV
           echo "C:\vcpkg\installed\x64-windows\bin" >> $env:GITHUB_PATH
 
       - name: install frontend dependencies
