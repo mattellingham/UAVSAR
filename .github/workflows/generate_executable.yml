@@ -32,8 +32,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: install LLVM, cmake and sqlite3
-        run: choco install llvm cmake sqlite -y
+      - name: install LLVM
+        run: choco install llvm -y
 
       - name: setup conda
         uses: conda-incubator/setup-miniconda@v3
@@ -42,9 +42,9 @@ jobs:
           activate-environment: buildenv
           channels: conda-forge
 
-      - name: install GDAL via conda
+      - name: install GDAL and proj via conda
         shell: pwsh
-        run: conda install -y "gdal=3.9" -c conda-forge
+        run: conda install -y "gdal=3.9" proj sqlite -c conda-forge
 
       - name: set environment variables
         shell: pwsh
@@ -54,18 +54,22 @@ jobs:
           # Fix gdal lib name if needed
           if ((Test-Path "$libDir\lib\gdal.lib") -and (-not (Test-Path "$libDir\lib\gdal_i.lib"))) {
             Copy-Item "$libDir\lib\gdal.lib" "$libDir\lib\gdal_i.lib"
+            Write-Host "Copied gdal.lib -> gdal_i.lib"
           }
           Write-Host "GDAL libs:"; dir "$libDir\lib\gdal*"
-          Write-Host "SQLite libs:"; dir "C:\ProgramData\chocolatey\lib\SQLite\tools\*"
+          Write-Host "PROJ libs:"; dir "$libDir\lib\proj*"
+          Write-Host "SQLite libs:"; dir "$libDir\lib\sqlite*"
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
           echo "GDAL_HOME=$libDir" >> $env:GITHUB_ENV
           echo "GDAL_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
           echo "GDAL_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
           echo "GDAL_VERSION=3.9.0" >> $env:GITHUB_ENV
-          echo "PROJ_LIB=$libDir\share\proj" >> $env:GITHUB_ENV
           echo "PROJ_NO_PKG_CONFIG=1" >> $env:GITHUB_ENV
-          echo "SQLITE3_LIB_DIR=C:\ProgramData\chocolatey\lib\SQLite\tools" >> $env:GITHUB_ENV
-          echo "SQLITE3_INCLUDE_DIR=C:\ProgramData\chocolatey\lib\SQLite\tools" >> $env:GITHUB_ENV
+          echo "PROJ_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
+          echo "PROJ_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
+          echo "PROJ_LIB=$libDir\share\proj" >> $env:GITHUB_ENV
+          echo "SQLITE3_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
+          echo "SQLITE3_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
           echo "$libDir\bin" >> $env:GITHUB_PATH
 
       - name: install frontend dependencies
