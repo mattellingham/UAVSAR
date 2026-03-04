@@ -32,48 +32,40 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: install LLVM
-        run: choco install llvm -y
+      - name: install LLVM, cmake and sqlite3
+        run: choco install llvm cmake sqlite -y
 
-      - name: setup conda with GDAL
+      - name: setup conda
         uses: conda-incubator/setup-miniconda@v3
         with:
           miniforge-version: latest
           activate-environment: buildenv
           channels: conda-forge
 
-      - name: install GDAL and proj via conda
+      - name: install GDAL via conda
         shell: pwsh
-        run: |
-          conda activate buildenv
-          conda install -y gdal proj sqlite -c conda-forge
+        run: conda install -y "gdal=3.9" -c conda-forge
 
       - name: set environment variables
         shell: pwsh
         run: |
-          # CONDA env var is set by setup-miniconda, e.g. C:\Users\runneradmin\miniconda3
-          $condaBase = $env:CONDA
-          $libDir = "$condaBase\envs\buildenv\Library"
-          Write-Host "Using lib dir: $libDir"
-          Write-Host "Contents of lib dir:"
-          dir $libDir
+          $libDir = "$env:CONDA\envs\buildenv\Library"
+          Write-Host "Lib dir: $libDir"
           # Fix gdal lib name if needed
           if ((Test-Path "$libDir\lib\gdal.lib") -and (-not (Test-Path "$libDir\lib\gdal_i.lib"))) {
             Copy-Item "$libDir\lib\gdal.lib" "$libDir\lib\gdal_i.lib"
-            Write-Host "Copied gdal.lib to gdal_i.lib"
           }
-          Write-Host "GDAL lib files:"
-          dir "$libDir\lib\gdal*"
+          Write-Host "GDAL libs:"; dir "$libDir\lib\gdal*"
+          Write-Host "SQLite libs:"; dir "C:\ProgramData\chocolatey\lib\SQLite\tools\*"
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
           echo "GDAL_HOME=$libDir" >> $env:GITHUB_ENV
           echo "GDAL_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
           echo "GDAL_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
-          echo "PROJ_ROOT=$libDir" >> $env:GITHUB_ENV
-          echo "PROJ_NO_PKG_CONFIG=1" >> $env:GITHUB_ENV
+          echo "GDAL_VERSION=3.9.0" >> $env:GITHUB_ENV
           echo "PROJ_LIB=$libDir\share\proj" >> $env:GITHUB_ENV
-          echo "PROJ_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
-          echo "PROJ_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
-          echo "SQLITE3_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
+          echo "PROJ_NO_PKG_CONFIG=1" >> $env:GITHUB_ENV
+          echo "SQLITE3_LIB_DIR=C:\ProgramData\chocolatey\lib\SQLite\tools" >> $env:GITHUB_ENV
+          echo "SQLITE3_INCLUDE_DIR=C:\ProgramData\chocolatey\lib\SQLite\tools" >> $env:GITHUB_ENV
           echo "$libDir\bin" >> $env:GITHUB_PATH
 
       - name: install frontend dependencies
