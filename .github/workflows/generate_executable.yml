@@ -5,26 +5,12 @@ on:
     branches:
       - release
 
-# This workflow will trigger on each push to the `release` branch to create or update a GitHub release, build your app, and upload the artifacts to the release.
-
 jobs:
   publish-tauri:
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: 'macos-latest' # for Arm based macs (M1 and above).
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest' # for Intel based macs.
-            args: '--target x86_64-apple-darwin'
-          - platform: 'ubuntu-22.04'
-            args: ''
-          - platform: 'windows-latest'
-            args: ''
+    runs-on: windows-latest
 
-    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,41 +21,23 @@ jobs:
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libclang-dev \
-            clang \
-            llvm \
-            libgdal-dev \
-            gdal-bin \
-            cmake
+      - name: install LLVM
+        run: choco install llvm -y
 
-      - name: install dependencies (windows only)
-        if: matrix.platform == 'windows-latest'
+      - name: install GDAL via vcpkg
         run: |
-          choco install llvm cmake -y
           vcpkg install gdal:x64-windows
+          # gdal-sys requires gdal_i.lib but vcpkg names it gdal.lib - rename it
+          copy C:\vcpkg\installed\x64-windows\lib\gdal.lib C:\vcpkg\installed\x64-windows\lib\gdal_i.lib
+
+      - name: set environment variables
+        run: |
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
           echo "GDAL_HOME=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
           echo "GDAL_LIB_DIR=C:\vcpkg\installed\x64-windows\lib" >> $env:GITHUB_ENV
           echo "GDAL_INCLUDE_DIR=C:\vcpkg\installed\x64-windows\include" >> $env:GITHUB_ENV
           echo "C:\vcpkg\installed\x64-windows\bin" >> $env:GITHUB_PATH
-
-      - name: install dependencies (macos only)
-        if: matrix.platform == 'macos-latest'
-        run: |
-          brew install gdal llvm cmake
-          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
 
       - name: install frontend dependencies
         run: npm install
@@ -83,4 +51,3 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
