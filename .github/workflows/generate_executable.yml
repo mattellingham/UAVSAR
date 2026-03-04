@@ -35,37 +35,45 @@ jobs:
       - name: install LLVM
         run: choco install llvm -y
 
-      - name: cache GISInternals
-        uses: actions/cache@v4
-        id: gisinternals-cache
+      - name: setup conda with GDAL
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          path: C:\gdal
-          key: gisinternals-gdal-3-9-0-v1
+          miniforge-version: latest
+          activate-environment: buildenv
+          channels: conda-forge
 
-      - name: download pre-built GDAL from GISInternals
-        if: steps.gisinternals-cache.outputs.cache-hit != 'true'
+      - name: install GDAL and proj via conda
+        shell: pwsh
         run: |
-          curl -L -o gdal-libs.zip https://download.gisinternals.com/sdk/downloads/release-1930-x64-gdal-3-9-0-mapserver-8-2-0-libs.zip
-          curl -L -o gdal-bin.zip https://download.gisinternals.com/sdk/downloads/release-1930-x64-gdal-3-9-0-mapserver-8-2-0.zip
-          Expand-Archive -Path gdal-libs.zip -DestinationPath C:\gdal
-          Expand-Archive -Path gdal-bin.zip -DestinationPath C:\gdal
+          conda activate buildenv
+          conda install -y gdal proj sqlite -c conda-forge
 
       - name: set environment variables
+        shell: pwsh
         run: |
+          $condaEnv = "C:\Miniconda\envs\buildenv"
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-          echo "GDAL_HOME=C:\gdal" >> $env:GITHUB_ENV
-          echo "GDAL_LIB_DIR=C:\gdal\lib" >> $env:GITHUB_ENV
-          echo "GDAL_INCLUDE_DIR=C:\gdal\include" >> $env:GITHUB_ENV
+          echo "GDAL_HOME=$condaEnv\Library" >> $env:GITHUB_ENV
+          echo "GDAL_LIB_DIR=$condaEnv\Library\lib" >> $env:GITHUB_ENV
+          echo "GDAL_INCLUDE_DIR=$condaEnv\Library\include" >> $env:GITHUB_ENV
+          echo "PROJ_ROOT=$condaEnv\Library" >> $env:GITHUB_ENV
           echo "PROJ_NO_PKG_CONFIG=1" >> $env:GITHUB_ENV
-          echo "PROJ_ROOT=C:\gdal" >> $env:GITHUB_ENV
-          echo "PROJ_LIB_DIR=C:\gdal\lib" >> $env:GITHUB_ENV
-          echo "PROJ_INCLUDE_DIR=C:\gdal\include" >> $env:GITHUB_ENV
-          echo "PROJ_LIB=C:\gdal\bin\proj9\share" >> $env:GITHUB_ENV
-          echo "SQLITE3_LIB_DIR=C:\gdal\lib" >> $env:GITHUB_ENV
-          echo "C:\gdal\bin" >> $env:GITHUB_PATH
+          echo "PROJ_LIB=$condaEnv\Library\share\proj" >> $env:GITHUB_ENV
+          echo "PROJ_LIB_DIR=$condaEnv\Library\lib" >> $env:GITHUB_ENV
+          echo "PROJ_INCLUDE_DIR=$condaEnv\Library\include" >> $env:GITHUB_ENV
+          echo "SQLITE3_LIB_DIR=$condaEnv\Library\lib" >> $env:GITHUB_ENV
+          echo "$condaEnv\Library\bin" >> $env:GITHUB_PATH
 
-      - name: list gdal lib directory for debugging
-        run: dir C:\gdal\lib
+      - name: fix gdal lib name
+        shell: pwsh
+        run: |
+          $condaEnv = "C:\Miniconda\envs\buildenv"
+          $src = "$condaEnv\Library\lib\gdal.lib"
+          $dst = "$condaEnv\Library\lib\gdal_i.lib"
+          if ((Test-Path $src) -and (-not (Test-Path $dst))) {
+            Copy-Item $src $dst
+          }
+          dir "$condaEnv\Library\lib\gdal*"
 
       - name: install frontend dependencies
         run: npm install
