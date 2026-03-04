@@ -44,7 +44,7 @@ pub async fn create_kmz(
 
     // Create the zip file
     let zip_path = format!("{}/wpmz.kmz", output_dir);
-    let zip_file = fs::File::create(zip_path)?;
+    let zip_file = fs::File::create(&zip_path)?;
     let mut zip = ZipWriter::new(zip_file);
     let zip_options = FileOptions::<()>::default().compression_method(Stored);
 
