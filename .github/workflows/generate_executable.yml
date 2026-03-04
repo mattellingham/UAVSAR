@@ -35,32 +35,37 @@ jobs:
       - name: install LLVM
         run: choco install llvm -y
 
-      - name: cache vcpkg packages
+      - name: cache GISInternals
         uses: actions/cache@v4
-        id: vcpkg-cache
+        id: gisinternals-cache
         with:
-          path: C:\vcpkg\installed
-          key: vcpkg-gdal-proj-sqlite3-x64-windows-v1
+          path: C:\gdal
+          key: gisinternals-gdal-3-9-0-v1
 
-      - name: install dependencies via vcpkg
-        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+      - name: download pre-built GDAL from GISInternals
+        if: steps.gisinternals-cache.outputs.cache-hit != 'true'
         run: |
-          vcpkg install gdal:x64-windows proj:x64-windows sqlite3:x64-windows
-
-      - name: fix gdal lib name
-        run: |
-          copy C:\vcpkg\installed\x64-windows\lib\gdal.lib C:\vcpkg\installed\x64-windows\lib\gdal_i.lib
+          curl -L -o gdal-libs.zip https://download.gisinternals.com/sdk/downloads/release-1930-x64-gdal-3-9-0-mapserver-8-2-0-libs.zip
+          curl -L -o gdal-bin.zip https://download.gisinternals.com/sdk/downloads/release-1930-x64-gdal-3-9-0-mapserver-8-2-0.zip
+          Expand-Archive -Path gdal-libs.zip -DestinationPath C:\gdal
+          Expand-Archive -Path gdal-bin.zip -DestinationPath C:\gdal
 
       - name: set environment variables
         run: |
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-          echo "GDAL_HOME=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
-          echo "GDAL_LIB_DIR=C:\vcpkg\installed\x64-windows\lib" >> $env:GITHUB_ENV
-          echo "GDAL_INCLUDE_DIR=C:\vcpkg\installed\x64-windows\include" >> $env:GITHUB_ENV
-          echo "PROJ_LIB=C:\vcpkg\installed\x64-windows\share\proj" >> $env:GITHUB_ENV
-          echo "PROJ_ROOT=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
-          echo "SQLITE3_LIB_DIR=C:\vcpkg\installed\x64-windows\lib" >> $env:GITHUB_ENV
-          echo "C:\vcpkg\installed\x64-windows\bin" >> $env:GITHUB_PATH
+          echo "GDAL_HOME=C:\gdal" >> $env:GITHUB_ENV
+          echo "GDAL_LIB_DIR=C:\gdal\lib" >> $env:GITHUB_ENV
+          echo "GDAL_INCLUDE_DIR=C:\gdal\include" >> $env:GITHUB_ENV
+          echo "PROJ_NO_PKG_CONFIG=1" >> $env:GITHUB_ENV
+          echo "PROJ_ROOT=C:\gdal" >> $env:GITHUB_ENV
+          echo "PROJ_LIB_DIR=C:\gdal\lib" >> $env:GITHUB_ENV
+          echo "PROJ_INCLUDE_DIR=C:\gdal\include" >> $env:GITHUB_ENV
+          echo "PROJ_LIB=C:\gdal\bin\proj9\share" >> $env:GITHUB_ENV
+          echo "SQLITE3_LIB_DIR=C:\gdal\lib" >> $env:GITHUB_ENV
+          echo "C:\gdal\bin" >> $env:GITHUB_PATH
+
+      - name: list gdal lib directory for debugging
+        run: dir C:\gdal\lib
 
       - name: install frontend dependencies
         run: npm install
