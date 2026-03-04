@@ -48,32 +48,30 @@ jobs:
           conda activate buildenv
           conda install -y gdal proj sqlite -c conda-forge
 
-      - name: set environment variables
+      - name: find conda env path and set environment variables
         shell: pwsh
         run: |
-          $condaEnv = "C:\Miniconda\envs\buildenv"
+          $condaEnv = (conda env list | Select-String "buildenv").ToString().Split()[1]
+          Write-Host "Conda env path: $condaEnv"
+          $libDir = "$condaEnv\Library"
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-          echo "GDAL_HOME=$condaEnv\Library" >> $env:GITHUB_ENV
-          echo "GDAL_LIB_DIR=$condaEnv\Library\lib" >> $env:GITHUB_ENV
-          echo "GDAL_INCLUDE_DIR=$condaEnv\Library\include" >> $env:GITHUB_ENV
-          echo "PROJ_ROOT=$condaEnv\Library" >> $env:GITHUB_ENV
+          echo "GDAL_HOME=$libDir" >> $env:GITHUB_ENV
+          echo "GDAL_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
+          echo "GDAL_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
+          echo "PROJ_ROOT=$libDir" >> $env:GITHUB_ENV
           echo "PROJ_NO_PKG_CONFIG=1" >> $env:GITHUB_ENV
-          echo "PROJ_LIB=$condaEnv\Library\share\proj" >> $env:GITHUB_ENV
-          echo "PROJ_LIB_DIR=$condaEnv\Library\lib" >> $env:GITHUB_ENV
-          echo "PROJ_INCLUDE_DIR=$condaEnv\Library\include" >> $env:GITHUB_ENV
-          echo "SQLITE3_LIB_DIR=$condaEnv\Library\lib" >> $env:GITHUB_ENV
-          echo "$condaEnv\Library\bin" >> $env:GITHUB_PATH
-
-      - name: fix gdal lib name
-        shell: pwsh
-        run: |
-          $condaEnv = "C:\Miniconda\envs\buildenv"
-          $src = "$condaEnv\Library\lib\gdal.lib"
-          $dst = "$condaEnv\Library\lib\gdal_i.lib"
-          if ((Test-Path $src) -and (-not (Test-Path $dst))) {
-            Copy-Item $src $dst
+          echo "PROJ_LIB=$libDir\share\proj" >> $env:GITHUB_ENV
+          echo "PROJ_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
+          echo "PROJ_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
+          echo "SQLITE3_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
+          echo "CONDA_LIB_DIR=$libDir" >> $env:GITHUB_ENV
+          echo "$libDir\bin" >> $env:GITHUB_PATH
+          # Fix gdal lib name if needed
+          if ((Test-Path "$libDir\lib\gdal.lib") -and (-not (Test-Path "$libDir\lib\gdal_i.lib"))) {
+            Copy-Item "$libDir\lib\gdal.lib" "$libDir\lib\gdal_i.lib"
           }
-          dir "$condaEnv\Library\lib\gdal*"
+          Write-Host "GDAL lib files:"
+          dir "$libDir\lib\gdal*"
 
       - name: install frontend dependencies
         run: npm install
