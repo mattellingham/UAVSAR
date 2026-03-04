@@ -32,8 +32,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: install LLVM
-        run: choco install llvm -y
+      - name: install LLVM and pkg-config
+        run: choco install llvm pkgconfiglite -y
 
       - name: setup conda
         uses: conda-incubator/setup-miniconda@v3
@@ -42,7 +42,7 @@ jobs:
           activate-environment: buildenv
           channels: conda-forge
 
-      - name: install GDAL and proj via conda
+      - name: install GDAL, proj and sqlite via conda
         shell: pwsh
         run: conda install -y "gdal=3.9" proj sqlite -c conda-forge
 
@@ -58,18 +58,22 @@ jobs:
           }
           Write-Host "GDAL libs:"; dir "$libDir\lib\gdal*"
           Write-Host "PROJ libs:"; dir "$libDir\lib\proj*"
-          Write-Host "SQLite libs:"; dir "$libDir\lib\sqlite*"
+          # Set PKG_CONFIG_PATH so proj-sys can find pre-built proj via pkg-config
+          $pkgConfigPath = "$libDir\lib\pkgconfig"
+          Write-Host "PKG_CONFIG_PATH: $pkgConfigPath"
+          if (Test-Path $pkgConfigPath) {
+            Write-Host "pkg-config files:"; dir $pkgConfigPath
+          } else {
+            Write-Host "WARNING: pkgconfig dir not found at $pkgConfigPath"
+          }
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
           echo "GDAL_HOME=$libDir" >> $env:GITHUB_ENV
           echo "GDAL_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
           echo "GDAL_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
           echo "GDAL_VERSION=3.9.0" >> $env:GITHUB_ENV
-          echo "PROJ_NO_PKG_CONFIG=1" >> $env:GITHUB_ENV
-          echo "PROJ_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
-          echo "PROJ_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$pkgConfigPath" >> $env:GITHUB_ENV
           echo "PROJ_LIB=$libDir\share\proj" >> $env:GITHUB_ENV
-          echo "SQLITE3_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
-          echo "SQLITE3_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$libDir" >> $env:GITHUB_ENV
           echo "$libDir\bin" >> $env:GITHUB_PATH
 
       - name: install frontend dependencies
