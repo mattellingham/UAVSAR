@@ -22,13 +22,33 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
       - name: install LLVM
         run: choco install llvm -y
 
+      - name: cache vcpkg packages
+        uses: actions/cache@v4
+        id: vcpkg-cache
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-gdal-proj-sqlite3-x64-windows-v1
+
       - name: install dependencies via vcpkg
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         run: |
           vcpkg install gdal:x64-windows proj:x64-windows sqlite3:x64-windows
-          # gdal-sys requires gdal_i.lib but vcpkg names it gdal.lib - copy it
+
+      - name: fix gdal lib name
+        run: |
           copy C:\vcpkg\installed\x64-windows\lib\gdal.lib C:\vcpkg\installed\x64-windows\lib\gdal_i.lib
 
       - name: set environment variables
