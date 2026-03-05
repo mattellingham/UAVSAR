@@ -23,7 +23,7 @@
   },
   "bundle": {
     "resources": {
-      "dlls/*": "./"
+      "dlls/*": "./",
       "resources/drone_list.json": "resources/",
       "resources/proj/*": "proj/"
     },
