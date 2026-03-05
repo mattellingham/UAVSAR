@@ -24,7 +24,8 @@
   "bundle": {
     "resources": {
       "dlls/gdal.dll": "./",
-      "dlls/sqlite3.dll": "./"
+      "dlls/sqlite3.dll": "./",
+      "dlls/proj_9.dll": "./"
     },
     "active": true,
     "targets": "all",
