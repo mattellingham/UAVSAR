@@ -84,6 +84,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path src-tauri\resources\proj
           Copy-Item "$binDir\*.dll" src-tauri\dlls\ -Force
           Copy-Item "$env:CONDA\envs\buildenv\Library\share\proj\*" src-tauri\resources\proj\ -Recurse -Force
+          icacls "src-tauri\resources" /grant "Everyone:(OI)(CI)F" /T
           Write-Host "Copied DLLs:"; (dir src-tauri\dlls).Count
       
       - name: list proj DLLs
