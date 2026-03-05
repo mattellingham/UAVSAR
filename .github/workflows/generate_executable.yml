@@ -85,6 +85,7 @@ jobs:
           Copy-Item "$binDir\sqlite3.dll" src-tauri\dlls\
           Copy-Item "$binDir\proj*.dll" src-tauri\dlls\
           Write-Host "Copied DLLs:"; dir src-tauri\dlls
+          Write-Host "Proj DLLs:"; dir "$binDir\proj*.dll"
           
       - name: install frontend dependencies
         run: npm install
