@@ -76,6 +76,16 @@ jobs:
           echo "CMAKE_PREFIX_PATH=$libDir" >> $env:GITHUB_ENV
           echo "$libDir\bin" >> $env:GITHUB_PATH
 
+      - name: copy runtime DLLs for bundling
+        shell: pwsh
+        run: |
+          $binDir = "$env:CONDA\envs\buildenv\Library\bin"
+          New-Item -ItemType Directory -Force -Path src-tauri\dlls
+          Copy-Item "$binDir\gdal.dll" src-tauri\dlls\
+          Copy-Item "$binDir\sqlite3.dll" src-tauri\dlls\
+          Copy-Item "$binDir\proj*.dll" src-tauri\dlls\
+          Write-Host "Copied DLLs:"; dir src-tauri\dlls
+          
       - name: install frontend dependencies
         run: npm install
 
