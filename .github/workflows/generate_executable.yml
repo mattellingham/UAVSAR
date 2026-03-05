@@ -83,6 +83,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path src-tauri\dlls
           Copy-Item "$binDir\gdal.dll" src-tauri\dlls\
           Copy-Item "$binDir\sqlite3.dll" src-tauri\dlls\
+          Copy-Item "$binDir\proj_9.dll" src-tauri\dlls\
           Write-Host "All proj DLLs available:"
           dir "$binDir\proj*.dll"
       
