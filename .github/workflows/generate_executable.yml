@@ -93,6 +93,16 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
+      - name: copy runtime DLLs for bundling
+        shell: pwsh
+        run: |
+          $binDir = "$env:CONDA\envs\buildenv\Library\bin"
+          New-Item -ItemType Directory -Force -Path src-tauri\dlls
+          New-Item -ItemType Directory -Force -Path src-tauri\proj-data
+          Copy-Item "$binDir\*.dll" src-tauri\dlls\ -Force
+          Copy-Item "$env:CONDA\envs\buildenv\Library\share\proj\*" src-tauri\proj-data\ -Recurse -Force
+          Write-Host "Copied DLLs:"; (dir src-tauri\dlls).Count
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
