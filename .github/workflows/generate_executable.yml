@@ -81,9 +81,9 @@ jobs:
         run: |
           $binDir = "$env:CONDA\envs\buildenv\Library\bin"
           New-Item -ItemType Directory -Force -Path src-tauri\dlls
-          # Copy all DLLs from conda env - catches all GDAL dependencies
-          Copy-Item "$binDir\*.dll" src-tauri\dlls\
-          Copy-Item "$env:CONDA\envs\buildenv\Library\share\proj" src-tauri\resources\proj -Recurse
+          New-Item -ItemType Directory -Force -Path src-tauri\resources\proj
+          Copy-Item "$binDir\*.dll" src-tauri\dlls\ -Force
+          Copy-Item "$env:CONDA\envs\buildenv\Library\share\proj\*" src-tauri\resources\proj\ -Recurse -Force
           Write-Host "Copied DLLs:"; (dir src-tauri\dlls).Count
       
       - name: list proj DLLs
