@@ -44,7 +44,7 @@ jobs:
 
       - name: install GDAL, proj and sqlite via conda
         shell: pwsh
-        run: conda install -y "gdal=3.9" proj sqlite -c conda-forge
+        run: conda install -y "gdal=3.8" proj sqlite -c conda-forge
 
       - name: set environment variables
         shell: pwsh
