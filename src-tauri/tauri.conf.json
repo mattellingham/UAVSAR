@@ -25,7 +25,10 @@
     "resources": {
       "dlls/gdal.dll": "./",
       "dlls/sqlite3.dll": "./",
-      "dlls/proj_9.dll": "./"
+      "dlls/proj_9.dll": "./",
+      "dlls/zlib.dll": "./",
+      "dlls/archive.dll": "./",
+      "dlls/libcurl.dll": "./"
     },
     "active": true,
     "targets": "all",
