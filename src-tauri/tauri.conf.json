@@ -26,7 +26,7 @@
       "dlls/gdal.dll": "./",
       "dlls/sqlite3.dll": "./",
       "dlls/proj_9_5.dll": "./"
-  }
+    },
     "active": true,
     "targets": "all",
     "icon": [
@@ -35,9 +35,6 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "resources": [
-      "resources"
     ]
   }
 }
