@@ -84,8 +84,10 @@ jobs:
           Copy-Item "$binDir\gdal.dll" src-tauri\dlls\
           Copy-Item "$binDir\sqlite3.dll" src-tauri\dlls\
           Copy-Item "$binDir\proj_9.dll" src-tauri\dlls\
-          Write-Host "All proj DLLs available:"
-          dir "$binDir\proj*.dll"
+          Copy-Item "$binDir\zlib.dll" src-tauri\dlls\
+          Copy-Item "$binDir\archive.dll" src-tauri\dlls\
+          Copy-Item "$binDir\libcurl.dll" src-tauri\dlls\
+          Write-Host "Copied DLLs:"; dir src-tauri\dlls
       
       - name: list proj DLLs
         shell: pwsh
