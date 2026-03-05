@@ -86,7 +86,11 @@ jobs:
           Copy-Item "$binDir\proj*.dll" src-tauri\dlls\
           Write-Host "Copied DLLs:"; dir src-tauri\dlls
           Write-Host "Proj DLLs:"; dir "$binDir\proj*.dll"
-          
+      
+      - name: list proj DLLs
+        shell: pwsh
+        run: dir "$env:CONDA\envs\buildenv\Library\bin\proj*.dll"
+        
       - name: install frontend dependencies
         run: npm install
 
