@@ -22,6 +22,7 @@
     }
   },
   "bundle": {
+    "resources": ["dlls/*"],
     "active": true,
     "targets": "all",
     "icon": [
