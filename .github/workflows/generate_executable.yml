@@ -83,9 +83,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path src-tauri\dlls
           Copy-Item "$binDir\gdal.dll" src-tauri\dlls\
           Copy-Item "$binDir\sqlite3.dll" src-tauri\dlls\
-          Copy-Item "$binDir\proj*.dll" src-tauri\dlls\
-          Write-Host "Copied DLLs:"; dir src-tauri\dlls
-          Write-Host "Proj DLLs:"; dir "$binDir\proj*.dll"
+          Write-Host "All proj DLLs available:"
+          dir "$binDir\proj*.dll"
       
       - name: list proj DLLs
         shell: pwsh
