@@ -24,6 +24,8 @@
   "bundle": {
     "resources": {
       "dlls/*": "./"
+      "resources/drone_list.json": "resources/"
+      "resources/proj/*": "proj/"
     },
     "active": true,
     "targets": "all",
