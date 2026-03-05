@@ -81,13 +81,9 @@ jobs:
         run: |
           $binDir = "$env:CONDA\envs\buildenv\Library\bin"
           New-Item -ItemType Directory -Force -Path src-tauri\dlls
-          Copy-Item "$binDir\gdal.dll" src-tauri\dlls\
-          Copy-Item "$binDir\sqlite3.dll" src-tauri\dlls\
-          Copy-Item "$binDir\proj_9.dll" src-tauri\dlls\
-          Copy-Item "$binDir\zlib.dll" src-tauri\dlls\
-          Copy-Item "$binDir\archive.dll" src-tauri\dlls\
-          Copy-Item "$binDir\libcurl.dll" src-tauri\dlls\
-          Write-Host "Copied DLLs:"; dir src-tauri\dlls
+          # Copy all DLLs from conda env - catches all GDAL dependencies
+          Copy-Item "$binDir\*.dll" src-tauri\dlls\
+          Write-Host "Copied DLLs:"; (dir src-tauri\dlls).Count
       
       - name: list proj DLLs
         shell: pwsh
