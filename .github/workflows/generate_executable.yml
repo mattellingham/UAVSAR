@@ -32,35 +32,49 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: install LLVM
-        run: choco install llvm -y
+      - name: install LLVM and pkg-config
+        run: choco install llvm pkgconfiglite -y
 
-      - name: cache vcpkg packages
-        uses: actions/cache@v4
-        id: vcpkg-cache
+      - name: setup conda
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          path: C:\vcpkg\installed
-          key: vcpkg-gdal-proj-sqlite3-x64-windows-v1
+          miniforge-version: latest
+          activate-environment: buildenv
+          channels: conda-forge
 
-      - name: install dependencies via vcpkg
-        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
-        run: |
-          vcpkg install gdal:x64-windows proj:x64-windows sqlite3:x64-windows
-
-      - name: fix gdal lib name
-        run: |
-          copy C:\vcpkg\installed\x64-windows\lib\gdal.lib C:\vcpkg\installed\x64-windows\lib\gdal_i.lib
+      - name: install GDAL, proj and sqlite via conda
+        shell: pwsh
+        run: conda install -y "gdal=3.9" proj sqlite -c conda-forge
 
       - name: set environment variables
+        shell: pwsh
         run: |
+          $libDir = "$env:CONDA\envs\buildenv\Library"
+          Write-Host "Lib dir: $libDir"
+          # Fix gdal lib name if needed
+          if ((Test-Path "$libDir\lib\gdal.lib") -and (-not (Test-Path "$libDir\lib\gdal_i.lib"))) {
+            Copy-Item "$libDir\lib\gdal.lib" "$libDir\lib\gdal_i.lib"
+            Write-Host "Copied gdal.lib -> gdal_i.lib"
+          }
+          Write-Host "GDAL libs:"; dir "$libDir\lib\gdal*"
+          Write-Host "PROJ libs:"; dir "$libDir\lib\proj*"
+          # Set PKG_CONFIG_PATH so proj-sys can find pre-built proj via pkg-config
+          $pkgConfigPath = "$libDir\lib\pkgconfig"
+          Write-Host "PKG_CONFIG_PATH: $pkgConfigPath"
+          if (Test-Path $pkgConfigPath) {
+            Write-Host "pkg-config files:"; dir $pkgConfigPath
+          } else {
+            Write-Host "WARNING: pkgconfig dir not found at $pkgConfigPath"
+          }
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-          echo "GDAL_HOME=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
-          echo "GDAL_LIB_DIR=C:\vcpkg\installed\x64-windows\lib" >> $env:GITHUB_ENV
-          echo "GDAL_INCLUDE_DIR=C:\vcpkg\installed\x64-windows\include" >> $env:GITHUB_ENV
-          echo "PROJ_LIB=C:\vcpkg\installed\x64-windows\share\proj" >> $env:GITHUB_ENV
-          echo "PROJ_ROOT=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
-          echo "SQLITE3_LIB_DIR=C:\vcpkg\installed\x64-windows\lib" >> $env:GITHUB_ENV
-          echo "C:\vcpkg\installed\x64-windows\bin" >> $env:GITHUB_PATH
+          echo "GDAL_HOME=$libDir" >> $env:GITHUB_ENV
+          echo "GDAL_LIB_DIR=$libDir\lib" >> $env:GITHUB_ENV
+          echo "GDAL_INCLUDE_DIR=$libDir\include" >> $env:GITHUB_ENV
+          echo "GDAL_VERSION=3.9.0" >> $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$pkgConfigPath" >> $env:GITHUB_ENV
+          echo "PROJ_LIB=$libDir\share\proj" >> $env:GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$libDir" >> $env:GITHUB_ENV
+          echo "$libDir\bin" >> $env:GITHUB_PATH
 
       - name: install frontend dependencies
         run: npm install
