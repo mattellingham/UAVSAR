@@ -22,7 +22,11 @@
     }
   },
   "bundle": {
-    "resources": ["dlls/*"],
+    "resources": {
+      "dlls/gdal.dll": "./",
+      "dlls/sqlite3.dll": "./",
+      "dlls/proj_9_5.dll": "./"
+  }
     "active": true,
     "targets": "all",
     "icon": [
