@@ -14,6 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: fix file permissions
+        shell: pwsh
+        run: |
+          icacls "src-tauri\resources" /grant "Everyone:F" /T
+          icacls "src-tauri" /grant "Everyone:F" /T
+
       - name: setup node
         uses: actions/setup-node@v4
         with:
@@ -102,11 +108,6 @@ jobs:
           Copy-Item "$binDir\*.dll" src-tauri\dlls\ -Force
           Copy-Item "$env:CONDA\envs\buildenv\Library\share\proj\*" src-tauri\proj-data\ -Recurse -Force
           Write-Host "Copied DLLs:"; (dir src-tauri\dlls).Count
-
-      - name: fix resource file permissions
-        shell: pwsh
-        run: |
-          icacls "src-tauri\resources\drone_list.json" /grant "Everyone:F"
 
       - uses: tauri-apps/tauri-action@v0
         env:
