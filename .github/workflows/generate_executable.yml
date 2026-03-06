@@ -103,6 +103,11 @@ jobs:
           Copy-Item "$env:CONDA\envs\buildenv\Library\share\proj\*" src-tauri\proj-data\ -Recurse -Force
           Write-Host "Copied DLLs:"; (dir src-tauri\dlls).Count
 
+      - name: fix resource file permissions
+        shell: pwsh
+        run: |
+          icacls "src-tauri\resources\drone_list.json" /grant "Everyone:F"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
