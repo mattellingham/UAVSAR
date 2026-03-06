@@ -17,9 +17,8 @@ jobs:
       - name: fix drone_list permissions
         shell: pwsh
         run: |
-          $content = Get-Content "src-tauri\resources\drone_list.json" -Raw
-          Remove-Item "src-tauri\resources\drone_list.json" -Force
-          Set-Content "src-tauri\resources\drone_list.json" -Value $content -NoNewline
+          takeown /F "src-tauri\resources\drone_list.json"
+          icacls "src-tauri\resources\drone_list.json" /grant "runneradmin:F"
 
       - name: setup node
         uses: actions/setup-node@v4
