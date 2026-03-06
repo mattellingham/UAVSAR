@@ -14,11 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: fix file permissions
+      - name: fix drone_list permissions
         shell: pwsh
         run: |
-          icacls "src-tauri\resources" /grant "Everyone:F" /T
-          icacls "src-tauri" /grant "Everyone:F" /T
+          $content = Get-Content "src-tauri\resources\drone_list.json" -Raw
+          Remove-Item "src-tauri\resources\drone_list.json" -Force
+          Set-Content "src-tauri\resources\drone_list.json" -Value $content -NoNewline
 
       - name: setup node
         uses: actions/setup-node@v4
