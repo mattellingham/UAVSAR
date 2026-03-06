@@ -1,12 +1,5 @@
 [
   {
-    "model": "DJI Mavic Pro",
-    "fov": "80",
-    "altitude": "100",
-    "overlap": "55",
-    "speed": "19"
-  },
-  {
     "model": "DJI Mavic 3",
     "fov": "84",
     "altitude": "100",
