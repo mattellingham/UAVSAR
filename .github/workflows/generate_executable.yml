@@ -58,7 +58,6 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
           key: ${{ runner.os }}-cargo-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-v2-
 
@@ -132,19 +131,6 @@ jobs:
           Copy-Item "$binDir\*.dll" src-tauri\dlls\ -Force
           Copy-Item "$env:CONDA\envs\buildenv\Library\share\proj\*" src-tauri\proj-data\ -Recurse -Force
           Write-Host "Copied DLLs:"; (dir src-tauri\dlls).Count
-
-      - name: clear stale bundle artifacts
-        shell: pwsh
-        run: |
-          Remove-Item -Recurse -Force "src-tauri\target\release\bundle" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "$env:LOCALAPPDATA\tauri" -ErrorAction SilentlyContinue
-          Get-ChildItem -Recurse -Path "src-tauri\target" -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -imatch 'wix' } |
-            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-          Write-Host "Remaining wix refs in target:"
-          Get-ChildItem -Recurse -Path "src-tauri\target" -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -imatch 'wix' } |
-            Select-Object FullName
 
       - uses: tauri-apps/tauri-action@v0
         env:
