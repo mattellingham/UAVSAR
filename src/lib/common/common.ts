@@ -16,13 +16,15 @@ export async function generateFlightPath() {
         return;
     }
 
+    if (!drone) {
+        console.error("No drone configured");
+        return;
+    }
+
     try {
         const flightPathResult = await invoke<FlightPathResult>(
             "generate_flightpath",
-            {
-                coords: area_coordinates,
-                drone: drone,
-            },
+            { coords: area_coordinates, drone: drone },
         );
         flightPathResultStore.set(flightPathResult);
     } catch (error) {
@@ -30,4 +32,3 @@ export async function generateFlightPath() {
         flightPathResultStore.set(null);
     }
 }
-
