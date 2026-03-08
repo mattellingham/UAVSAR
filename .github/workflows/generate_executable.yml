@@ -137,6 +137,7 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force "src-tauri\target\release\bundle" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$env:LOCALAPPDATA\tauri" -ErrorAction SilentlyContinue
 
       - uses: tauri-apps/tauri-action@v0
         env:
