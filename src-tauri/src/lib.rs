@@ -1,6 +1,8 @@
 mod flight_path;
 mod writer;
 
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
