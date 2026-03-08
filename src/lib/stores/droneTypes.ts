@@ -43,7 +43,7 @@ async function ensureDataDir(filename: string = FILE_NAME) {
     });
     if (!fileExists) {
         // Copy default drone list into DATA_DIR
-        const srcPath = await resolveResource(`resources/${filename}`);
+        const srcPath = await resolveResource(filename);
         const bytes = await readTextFile(srcPath);
         await writeTextFile(`${SUBDIR}/${filename}`, bytes, { baseDir: DATA_DIR });
     }
