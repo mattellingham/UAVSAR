@@ -41,10 +41,11 @@ pub struct Waypoint {
 }
 
 #[tauri::command]
-pub async fn generate_flightpath(coords: Vec<[f64; 2]>, drone: Drone) -> FlightPlanResult {
+pub async fn generate_flightpath(coords: Vec<[f64; 2]>, drone: Drone) -> Result<FlightPlanResult, String> {
     let points: Vec<Coord> = coords.iter().map(|c| Coord::from((c[0], c[1]))).collect();
     let polygon = Polygon::new(LineString::from(points.clone()), vec![]);
-    let mbr = MinimumRotatedRect::minimum_rotated_rect(&polygon).unwrap();
+    let mbr = MinimumRotatedRect::minimum_rotated_rect(&polygon)
+        .ok_or("Failed to compute minimum rotated rect")?;
     let mbr_coords = mbr.exterior().coords().collect::<Vec<_>>();
     let vrt_path = String::from("../data/elevation.vrt");
 
@@ -52,18 +53,17 @@ pub async fn generate_flightpath(coords: Vec<[f64; 2]>, drone: Drone) -> FlightP
     let heading_angle = get_lawnmower_angle(&mbr_coords);
     let spacing = coverage * (100.0 - drone.overlap) / 100.0;
 
-    let waypoints =
-        get_waypoints_with_slope_adjustment(&polygon, &mbr, &heading_angle, &spacing, &vrt_path, &drone);
+    let waypoints = get_waypoints_with_slope_adjustment(&polygon, &mbr, &heading_angle, &spacing, &vrt_path, &drone);
     write_wqml(&waypoints, &heading_angle, &drone).await;
     let search_area = calculate_search_area(&polygon);
     let est_flight_time = calculate_flight_time(&waypoints, drone.speed);
 
-    FlightPlanResult {
+    Ok(FlightPlanResult {
         waypoints,
         heading_angle,
         search_area,
         est_flight_time,
-    }
+    })
 }
 
 /// Calculates the search area of the polygon in square kilometers
