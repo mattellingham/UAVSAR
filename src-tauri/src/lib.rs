@@ -18,7 +18,7 @@ pub fn run() {
             let proj_str = proj_data.to_string_lossy().to_string();
             let proj_clean = proj_str.strip_prefix(r"\\?\").unwrap_or(&proj_str).to_string();
     
-            std::env::set_var("PROJ_LIB", proj_clean);
+            std::env::set_var("PROJ_LIB", &proj_clean);
             std::env::set_var("PROJ_DATA", &proj_clean);
             Ok(())
         })
