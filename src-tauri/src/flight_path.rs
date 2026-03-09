@@ -42,6 +42,10 @@ pub struct Waypoint {
 
 #[tauri::command]
 pub async fn generate_flightpath(coords: Vec<[f64; 2]>, drone: Drone) -> Result<FlightPlanResult, String> {
+    // Test PROJ initialisation first - this will give a clean error if PROJ_LIB is wrong
+    Proj::new_known_crs("EPSG:4326", "EPSG:2193", None)
+        .map_err(|e| format!("PROJ init failed: {}", e))?;
+
     let points: Vec<Coord> = coords.iter().map(|c| Coord::from((c[0], c[1]))).collect();
     let polygon = Polygon::new(LineString::from(points.clone()), vec![]);
     let mbr = MinimumRotatedRect::minimum_rotated_rect(&polygon)
@@ -50,13 +54,16 @@ pub async fn generate_flightpath(coords: Vec<[f64; 2]>, drone: Drone) -> Result<
     let vrt_path = String::from("../data/elevation.vrt");
 
     let coverage = get_ground_coverage(&drone);
-    let heading_angle = get_lawnmower_angle(&mbr_coords);
+    let heading_angle = get_lawnmower_angle(&mbr_coords)
+        .map_err(|e| format!("Lawnmower angle failed: {}", e))?;
     let spacing = coverage * (100.0 - drone.overlap) / 100.0;
 
     let waypoints = get_waypoints_with_slope_adjustment(&polygon, &mbr, &heading_angle, &spacing, &vrt_path, &drone);
     write_wqml(&waypoints, &heading_angle, &drone).await;
-    let search_area = calculate_search_area(&polygon);
-    let est_flight_time = calculate_flight_time(&waypoints, drone.speed);
+    let search_area = calculate_search_area(&polygon)
+        .map_err(|e| format!("Search area failed: {}", e))?;
+    let est_flight_time = calculate_flight_time(&waypoints, drone.speed)
+        .map_err(|e| format!("Flight time failed: {}", e))?;
 
     Ok(FlightPlanResult {
         waypoints,
