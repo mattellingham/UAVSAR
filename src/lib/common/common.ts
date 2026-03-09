@@ -28,7 +28,7 @@ export async function generateFlightPath() {
         );
         flightPathResultStore.set(flightPathResult);
     } catch (error) {
-        console.error("Failed to generate flight path:", error);
+        alert("Rust error: " + JSON.stringify(error));
         flightPathResultStore.set(null);
     }
 }
