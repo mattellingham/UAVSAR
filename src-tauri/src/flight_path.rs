@@ -45,9 +45,10 @@ pub async fn generate_flightpath(
     coords: Vec<[f64; 2]>,
     drone: Drone,
 ) -> Result<FlightPlanResult, String> {
-    // Test PROJ initialisation first - gives a clean error if PROJ_LIB is wrong
+    // Report PROJ_LIB path in error so we can diagnose
+    let proj_lib = std::env::var("PROJ_LIB").unwrap_or_else(|_| "NOT SET".to_string());
     Proj::new_known_crs("EPSG:4326", "EPSG:2193", None)
-        .map_err(|e| format!("PROJ init failed (PROJ_LIB may not be set): {}", e))?;
+        .map_err(|e| format!("PROJ init failed. PROJ_LIB={:?}. Error: {}", proj_lib, e))?;
 
     let points: Vec<Coord> = coords.iter().map(|c| Coord::from((c[0], c[1]))).collect();
     let polygon = Polygon::new(LineString::from(points.clone()), vec![]);
