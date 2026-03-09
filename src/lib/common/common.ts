@@ -28,7 +28,10 @@ export async function generateFlightPath() {
         );
         flightPathResultStore.set(flightPathResult);
     } catch (error) {
-        alert("Rust error: " + JSON.stringify(error));
+        const msg = typeof error === 'string' ? error : JSON.stringify(error);
         flightPathResultStore.set(null);
+        // Temporarily show in page title so it's visible
+        document.title = "ERROR: " + msg;
+        console.error("Flight path error:", msg);
     }
 }
