@@ -16,18 +16,22 @@ export async function generateFlightPath() {
         return;
     }
 
+    if (!drone) {
+        console.error("No drone configured");
+        return;
+    }
+
     try {
         const flightPathResult = await invoke<FlightPathResult>(
             "generate_flightpath",
-            {
-                coords: area_coordinates,
-                drone: drone,
-            },
+            { coords: area_coordinates, drone: drone },
         );
         flightPathResultStore.set(flightPathResult);
     } catch (error) {
-        console.error("Failed to generate flight path:", error);
+        const msg = typeof error === 'string' ? error : JSON.stringify(error);
         flightPathResultStore.set(null);
+        // Temporarily show in page title so it's visible
+        document.title = "ERROR: " + msg;
+        console.error("Flight path error:", msg);
     }
 }
-

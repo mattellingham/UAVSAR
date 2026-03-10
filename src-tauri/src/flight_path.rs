@@ -41,69 +41,79 @@ pub struct Waypoint {
 }
 
 #[tauri::command]
-pub async fn generate_flightpath(coords: Vec<[f64; 2]>, drone: Drone) -> FlightPlanResult {
+pub async fn generate_flightpath(
+    coords: Vec<[f64; 2]>,
+    drone: Drone,
+) -> Result<FlightPlanResult, String> {
+    // Report PROJ_LIB path in error so we can diagnose
+    let proj_lib = std::env::var("PROJ_LIB").unwrap_or_else(|_| "NOT SET".to_string());
+    Proj::new_known_crs("EPSG:4326", "EPSG:2193", None)
+        .map_err(|e| format!("PROJ init failed. PROJ_LIB={:?}. Error: {}", proj_lib, e))?;
+
     let points: Vec<Coord> = coords.iter().map(|c| Coord::from((c[0], c[1]))).collect();
     let polygon = Polygon::new(LineString::from(points.clone()), vec![]);
-    let mbr = MinimumRotatedRect::minimum_rotated_rect(&polygon).unwrap();
+    let mbr = MinimumRotatedRect::minimum_rotated_rect(&polygon)
+        .ok_or("Failed to compute minimum rotated rect")?;
     let mbr_coords = mbr.exterior().coords().collect::<Vec<_>>();
     let vrt_path = String::from("../data/elevation.vrt");
 
     let coverage = get_ground_coverage(&drone);
-    let heading_angle = get_lawnmower_angle(&mbr_coords);
+    let heading_angle = get_lawnmower_angle(&mbr_coords)?;
     let spacing = coverage * (100.0 - drone.overlap) / 100.0;
 
-    let waypoints =
-        get_waypoints_with_slope_adjustment(&polygon, &mbr, &heading_angle, &spacing, &vrt_path, &drone);
+    let waypoints = get_waypoints_with_slope_adjustment(
+        &polygon,
+        &mbr,
+        &heading_angle,
+        &spacing,
+        &vrt_path,
+        &drone,
+    )?;
     write_wqml(&waypoints, &heading_angle, &drone).await;
-    let search_area = calculate_search_area(&polygon);
-    let est_flight_time = calculate_flight_time(&waypoints, drone.speed);
+    let search_area = calculate_search_area(&polygon)?;
+    let est_flight_time = calculate_flight_time(&waypoints, drone.speed)?;
 
-    FlightPlanResult {
+    Ok(FlightPlanResult {
         waypoints,
         heading_angle,
         search_area,
         est_flight_time,
-    }
+    })
 }
 
 /// Calculates the search area of the polygon in square kilometers
-fn calculate_search_area(polygon: &Polygon) -> f64 {
-    // Convert polygon coordinates to meters (NZTM projection)
-    let coords_meters = get_coord_meters(&polygon.exterior().coords().collect::<Vec<_>>());
+fn calculate_search_area(polygon: &Polygon) -> Result<f64, String> {
+    let coords_meters =
+        get_coord_meters(&polygon.exterior().coords().collect::<Vec<_>>())?;
     let polygon_meters = Polygon::new(LineString::from(coords_meters), vec![]);
-
-    // Calculate area using the geo crate's Area trait
-    polygon_meters.unsigned_area() / 1_000_000.0
+    Ok(polygon_meters.unsigned_area() / 1_000_000.0)
 }
 
-fn calculate_flight_time(waypoints: &[Waypoint], speed_ms: f64) -> f64 {
+fn calculate_flight_time(waypoints: &[Waypoint], speed_ms: f64) -> Result<f64, String> {
     if waypoints.len() < 2 {
-        return 0.0;
+        return Ok(0.0);
     }
 
     let mut total_distance = 0.0;
-    let to_nztm =
-        Proj::new_known_crs("EPSG:4326", "EPSG:2193", None).expect("Failed to create projection");
+    let to_nztm = Proj::new_known_crs("EPSG:4326", "EPSG:2193", None)
+        .map_err(|e| format!("Failed to create NZTM projection: {}", e))?;
 
     for i in 0..waypoints.len() - 1 {
         let current = waypoints[i];
         let next = waypoints[i + 1];
 
-        // Convert both points to meters
         let (x1, y1) = to_nztm
             .convert((current.position[0], current.position[1]))
-            .expect("Cannot convert current waypoint to NZTM");
+            .map_err(|e| format!("Cannot convert current waypoint to NZTM: {}", e))?;
         let (x2, y2) = to_nztm
             .convert((next.position[0], next.position[1]))
-            .expect("Cannot convert next waypoint to NZTM");
+            .map_err(|e| format!("Cannot convert next waypoint to NZTM: {}", e))?;
 
-        // Calculate distance between waypoints in meters
         let distance = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
         total_distance += distance;
     }
 
-    // Convert time from seconds to minutes
-    (total_distance / speed_ms) / 60.0
+    Ok((total_distance / speed_ms) / 60.0)
 }
 
 /// Calculate the slope magnitude at a given point
@@ -113,64 +123,33 @@ fn calculate_slope_at_point(
     geotransform: &[f64; 6],
     raster_size: (usize, usize),
 ) -> f64 {
-    let pixel_size = geotransform[1].abs(); // assuming square pixels
-    let sample_distance = pixel_size * 2.0; // sample 2 pixels away
+    let pixel_size = geotransform[1].abs();
+    let sample_distance = pixel_size * 2.0;
 
-    // Get elevations in 4 directions
     let elevations = [
-        get_elevation_at_point(
-            rasterband,
-            geotransform,
-            raster_size,
-            point.x + sample_distance,
-            point.y,
-        ),
-        get_elevation_at_point(
-            rasterband,
-            geotransform,
-            raster_size,
-            point.x - sample_distance,
-            point.y,
-        ),
-        get_elevation_at_point(
-            rasterband,
-            geotransform,
-            raster_size,
-            point.x,
-            point.y + sample_distance,
-        ),
-        get_elevation_at_point(
-            rasterband,
-            geotransform,
-            raster_size,
-            point.x,
-            point.y - sample_distance,
-        ),
+        get_elevation_at_point(rasterband, geotransform, raster_size, point.x + sample_distance, point.y),
+        get_elevation_at_point(rasterband, geotransform, raster_size, point.x - sample_distance, point.y),
+        get_elevation_at_point(rasterband, geotransform, raster_size, point.x, point.y + sample_distance),
+        get_elevation_at_point(rasterband, geotransform, raster_size, point.x, point.y - sample_distance),
     ];
 
-    // Calculate gradients
     if let [Some(e_east), Some(e_west), Some(e_north), Some(e_south)] = elevations {
         let dx = (e_east - e_west) / (2.0 * sample_distance);
         let dy = (e_north - e_south) / (2.0 * sample_distance);
-
-        // Calculate slope magnitude (in radians)
         (dx.powi(2) + dy.powi(2)).sqrt().atan()
     } else {
-        0.0 // Return 0 slope if elevation data is unavailable
+        0.0
     }
 }
 
-/// Returns the coverage rectangle representing the area that the photo
-/// from that waypoint creates. Used for rendering the coverage rectangles on the frontend
 fn generate_coverage_rect(
     waypoint: &Coord,
     slope_magnitude: &f64,
     angle: &f64,
     drone: &Drone,
-) -> CoverageRect {
-    // TODO adjust photo height based on slope angle
-    let to_wgs84 =
-        Proj::new_known_crs("EPSG:2193", "EPSG:4326", None).expect("Failed to create projection");
+) -> Result<CoverageRect, String> {
+    let to_wgs84 = Proj::new_known_crs("EPSG:2193", "EPSG:4326", None)
+        .map_err(|e| format!("Failed to create WGS84 projection: {}", e))?;
 
     let base_coverage = get_ground_coverage(drone);
     let slope_adjusted_coverage = base_coverage / slope_magnitude.cos().max(0.1);
@@ -178,13 +157,12 @@ fn generate_coverage_rect(
     let hh = slope_adjusted_coverage / 2.0;
 
     let local_corners = [
-        [-hw, hh],  // top-left
-        [-hw, -hh], // bottom-left
-        [hw, -hh],  // bottom-right
-        [hw, hh],   // top-right
+        [-hw, hh],
+        [-hw, -hh],
+        [hw, -hh],
+        [hw, hh],
     ];
 
-    // rotate and translate
     let rotated_corners: Vec<[f64; 2]> = local_corners
         .iter()
         .map(|[x, y]| {
@@ -194,16 +172,19 @@ fn generate_coverage_rect(
         })
         .collect();
 
-    // project to WGS84
-    let wgs84_coords: Vec<[f64; 2]> = rotated_corners
-        .iter()
-        .map(|[x, y]| {
-            let (lon, lat) = to_wgs84.convert((*x, *y)).expect("Projection failed");
-            [lon, lat]
-        })
-        .collect();
+    let mut wgs84_coords: Vec<[f64; 2]> = Vec::new();
+    for [x, y] in &rotated_corners {
+        let (lon, lat) = to_wgs84
+            .convert((*x, *y))
+            .map_err(|e| format!("Coverage rect projection failed: {}", e))?;
+        wgs84_coords.push([lon, lat]);
+    }
 
-    CoverageRect {
+    let (center_lon, center_lat) = to_wgs84
+        .convert((waypoint.x, waypoint.y))
+        .map_err(|e| format!("Coverage rect center projection failed: {}", e))?;
+
+    Ok(CoverageRect {
         coords: [
             wgs84_coords[0],
             wgs84_coords[1],
@@ -211,17 +192,10 @@ fn generate_coverage_rect(
             wgs84_coords[3],
             wgs84_coords[0],
         ],
-        center: {
-            let (lon, lat) = to_wgs84
-                .convert((waypoint.x, waypoint.y))
-                .expect("Projection failed");
-            [lon, lat]
-        },
-    }
+        center: [center_lon, center_lat],
+    })
 }
 
-/// Returns a grid of waypoints that cover the entire search area using a lawnmower pattern
-/// with slope adjustment applied to each waypoint as it's created
 fn get_waypoints_with_slope_adjustment(
     polygon: &Polygon,
     mbr: &Polygon,
@@ -229,92 +203,62 @@ fn get_waypoints_with_slope_adjustment(
     base_spacing: &f64,
     vrt_path: &str,
     drone: &Drone,
-) -> Vec<Waypoint> {
-    let mut waypoints = Vec::new();
+) -> Result<Vec<Waypoint>, String> {
     let mbr_coords = mbr.exterior().coords().collect::<Vec<_>>();
-    let mbr_coords_meters = get_coord_meters(&mbr_coords);
+    let mbr_coords_meters = get_coord_meters(&mbr_coords)?;
 
-    // Convert the search area polygon to meters
-    let search_coords_meters = get_coord_meters(&polygon.exterior().coords().collect::<Vec<_>>());
+    let search_coords_meters =
+        get_coord_meters(&polygon.exterior().coords().collect::<Vec<_>>())?;
     let search_polygon_meters = Polygon::new(LineString::from(search_coords_meters), vec![]);
 
-    // Setup elevation data access
     let dataset = match Dataset::open(vrt_path) {
         Ok(ds) => ds,
         Err(_) => {
-            // Fallback to original method without slope adjustment
             return get_waypoints_fallback(polygon, mbr, angle, base_spacing, drone);
         }
     };
 
     let rasterband = match dataset.rasterband(1) {
         Ok(band) => band,
-        Err(_) => {
-            return get_waypoints_fallback(polygon, mbr, angle, base_spacing, drone);
-        }
+        Err(_) => return get_waypoints_fallback(polygon, mbr, angle, base_spacing, drone),
     };
 
     let geotransform = match dataset.geo_transform() {
         Ok(gt) => gt,
-        Err(_) => {
-            return get_waypoints_fallback(polygon, mbr, angle, base_spacing, drone);
-        }
+        Err(_) => return get_waypoints_fallback(polygon, mbr, angle, base_spacing, drone),
     };
 
     let raster_size = dataset.raster_size();
 
-    // Find the bounds of the MBR
-    let min_x = mbr_coords_meters
-        .iter()
-        .map(|c| c.x)
-        .fold(f64::INFINITY, f64::min);
-    let max_x = mbr_coords_meters
-        .iter()
-        .map(|c| c.x)
-        .fold(f64::NEG_INFINITY, f64::max);
-    let min_y = mbr_coords_meters
-        .iter()
-        .map(|c| c.y)
-        .fold(f64::INFINITY, f64::min);
-    let max_y = mbr_coords_meters
-        .iter()
-        .map(|c| c.y)
-        .fold(f64::NEG_INFINITY, f64::max);
+    let min_x = mbr_coords_meters.iter().map(|c| c.x).fold(f64::INFINITY, f64::min);
+    let max_x = mbr_coords_meters.iter().map(|c| c.x).fold(f64::NEG_INFINITY, f64::max);
+    let min_y = mbr_coords_meters.iter().map(|c| c.y).fold(f64::INFINITY, f64::min);
+    let max_y = mbr_coords_meters.iter().map(|c| c.y).fold(f64::NEG_INFINITY, f64::max);
 
-    // Calculate perpendicular direction for line spacing
     let perp_angle = angle + std::f64::consts::PI / 2.0;
     let line_dx = perp_angle.cos();
     let line_dy = perp_angle.sin();
-
-    // Calculate flight line direction
     let flight_dx = angle.cos();
     let flight_dy = angle.sin();
 
-    // Calculate the number of parallel lines needed (using base spacing)
     let width = ((max_x - min_x).powi(2) + (max_y - min_y).powi(2)).sqrt();
     let num_lines = (width / base_spacing).ceil() as i32;
 
-    let to_wgs84 =
-        Proj::new_known_crs("EPSG:2193", "EPSG:4326", None).expect("Failed to create projection");
+    let to_wgs84 = Proj::new_known_crs("EPSG:2193", "EPSG:4326", None)
+        .map_err(|e| format!("Failed to create WGS84 projection: {}", e))?;
 
-    // Generate waypoints for each flight line
+    let mut waypoints = Vec::new();
     let mut line_index = 0;
+
     for i in -(num_lines / 2)..=(num_lines / 2) {
         let offset_dist = i as f64 * base_spacing;
-
-        // Calculate the center point of the MBR
         let center_x = (min_x + max_x) / 2.0;
         let center_y = (min_y + max_y) / 2.0;
-
-        // Calculate the starting point of this flight line
         let line_start_x = center_x + offset_dist * line_dx;
         let line_start_y = center_y + offset_dist * line_dy;
 
-        // Generate points along this flight line with adaptive spacing
         let mut line_waypoints = Vec::new();
-        let line_length = width * 2.0; // Make sure we cover the entire area
-
-        // Start from one end of the line
+        let line_length = width * 2.0;
         let start_point_x = line_start_x - (line_length / 2.0) * flight_dx;
         let start_point_y = line_start_y - (line_length / 2.0) * flight_dy;
 
@@ -324,33 +268,19 @@ fn get_waypoints_with_slope_adjustment(
         while current_distance < line_length {
             let point_x = start_point_x + current_distance * flight_dx;
             let point_y = start_point_y + current_distance * flight_dy;
+            let point = Coord { x: point_x, y: point_y };
 
-            let point = Coord {
-                x: point_x,
-                y: point_y,
-            };
-
-            // Check if this point is within the search area
             if search_polygon_meters.coordinate_position(&point) == CoordPos::Inside
                 || search_polygon_meters.coordinate_position(&point) == CoordPos::OnBoundary
             {
-                // Calculate slope at this point
                 let slope_angle =
                     calculate_slope_at_point(point, &rasterband, &geotransform, raster_size);
-
                 let coverage_rect =
-                    generate_coverage_rect(&point, &slope_angle, &perp_angle, drone);
-
-                // Apply slope adjustment to this waypoint position
+                    generate_coverage_rect(&point, &slope_angle, &perp_angle, drone)?;
                 let adjusted_point = adjust_waypoint_for_slope(
-                    point,
-                    &rasterband,
-                    &geotransform,
-                    raster_size,
-                    drone.altitude,
+                    point, &rasterband, &geotransform, raster_size, drone.altitude,
                 );
 
-                // Convert adjusted waypoint back to lat/lon
                 if let Ok((lon, lat)) = to_wgs84.convert((adjusted_point.x, adjusted_point.y)) {
                     line_waypoints.push(Waypoint {
                         coverage_rect,
@@ -360,26 +290,19 @@ fn get_waypoints_with_slope_adjustment(
                     });
                 }
 
-                // Calculate next waypoint distance based on slope
-                // When slope increases, effective coverage width decreases by cos(slope)
-                // So we need to reduce spacing to maintain overlap
-                let slope_factor = slope_angle.cos().max(0.1); // Prevent division by very small numbers
+                let slope_factor = slope_angle.cos().max(0.1);
                 let adjusted_spacing = base_spacing * slope_factor;
-
                 current_distance += adjusted_spacing;
             } else {
-                // Move forward by a small increment if outside search area
                 current_distance += base_spacing / 4.0;
             }
 
             waypoint_count += 1;
-            // Safety check to prevent infinite loops
             if waypoint_count > 10000 {
                 break;
             }
         }
 
-        // Add waypoints from this line (alternate direction for lawnmower pattern)
         if !line_waypoints.is_empty() {
             if line_index % 2 == 0 {
                 waypoints.extend(line_waypoints);
@@ -390,85 +313,57 @@ fn get_waypoints_with_slope_adjustment(
         }
     }
 
-    waypoints
+    Ok(waypoints)
 }
 
-/// Fallback waypoint generation without slope adjustment
 fn get_waypoints_fallback(
     polygon: &Polygon,
     mbr: &Polygon,
     angle: &f64,
     spacing: &f64,
     drone: &Drone,
-) -> Vec<Waypoint> {
-    let mut waypoints = Vec::new();
+) -> Result<Vec<Waypoint>, String> {
     let mbr_coords = mbr.exterior().coords().collect::<Vec<_>>();
-    let mbr_coords_meters = get_coord_meters(&mbr_coords);
+    let mbr_coords_meters = get_coord_meters(&mbr_coords)?;
 
-    // Convert the search area polygon to meters
-    let search_coords_meters = get_coord_meters(&polygon.exterior().coords().collect::<Vec<_>>());
+    let search_coords_meters =
+        get_coord_meters(&polygon.exterior().coords().collect::<Vec<_>>())?;
     let search_polygon_meters = Polygon::new(LineString::from(search_coords_meters), vec![]);
 
-    // Find the bounds of the MBR
-    let min_x = mbr_coords_meters
-        .iter()
-        .map(|c| c.x)
-        .fold(f64::INFINITY, f64::min);
-    let max_x = mbr_coords_meters
-        .iter()
-        .map(|c| c.x)
-        .fold(f64::NEG_INFINITY, f64::max);
-    let min_y = mbr_coords_meters
-        .iter()
-        .map(|c| c.y)
-        .fold(f64::INFINITY, f64::min);
-    let max_y = mbr_coords_meters
-        .iter()
-        .map(|c| c.y)
-        .fold(f64::NEG_INFINITY, f64::max);
+    let min_x = mbr_coords_meters.iter().map(|c| c.x).fold(f64::INFINITY, f64::min);
+    let max_x = mbr_coords_meters.iter().map(|c| c.x).fold(f64::NEG_INFINITY, f64::max);
+    let min_y = mbr_coords_meters.iter().map(|c| c.y).fold(f64::INFINITY, f64::min);
+    let max_y = mbr_coords_meters.iter().map(|c| c.y).fold(f64::NEG_INFINITY, f64::max);
 
-    // Calculate perpendicular direction for line spacing
     let perp_angle = angle + std::f64::consts::PI / 2.0;
     let line_dx = perp_angle.cos();
     let line_dy = perp_angle.sin();
-
-    // Calculate flight line direction
     let flight_dx = angle.cos();
     let flight_dy = angle.sin();
 
-    // Calculate the number of parallel lines needed
     let width = ((max_x - min_x).powi(2) + (max_y - min_y).powi(2)).sqrt();
     let num_lines = (width / spacing).ceil() as i32;
 
-    // Generate waypoints for each flight line
+    let mut waypoints: Vec<Coord> = Vec::new();
     let mut line_index = 0;
+
     for i in -(num_lines / 2)..=(num_lines / 2) {
         let offset_dist = i as f64 * spacing;
-
-        // Calculate the center point of the MBR
         let center_x = (min_x + max_x) / 2.0;
         let center_y = (min_y + max_y) / 2.0;
-
-        // Calculate the starting point of this flight line
         let line_start_x = center_x + offset_dist * line_dx;
         let line_start_y = center_y + offset_dist * line_dy;
 
-        // Generate points along this flight line
         let mut line_waypoints = Vec::new();
-        let line_length = width * 2.0; // Make sure we cover the entire area
-        let num_points = (line_length / (spacing / 4.0)) as i32; // Higher resolution along the line
+        let line_length = width * 2.0;
+        let num_points = (line_length / (spacing / 4.0)) as i32;
 
         for j in -(num_points / 2)..=(num_points / 2) {
             let point_dist = j as f64 * (spacing / 4.0);
             let point_x = line_start_x + point_dist * flight_dx;
             let point_y = line_start_y + point_dist * flight_dy;
+            let point = Coord { x: point_x, y: point_y };
 
-            let point = Coord {
-                x: point_x,
-                y: point_y,
-            };
-
-            // Check if this point is within the search area
             if search_polygon_meters.coordinate_position(&point) == CoordPos::Inside
                 || search_polygon_meters.coordinate_position(&point) == CoordPos::OnBoundary
             {
@@ -476,7 +371,6 @@ fn get_waypoints_fallback(
             }
         }
 
-        // Add waypoints from this line (alternate direction for lawnmower pattern)
         if !line_waypoints.is_empty() {
             if line_index % 2 == 0 {
                 waypoints.extend(line_waypoints);
@@ -487,16 +381,15 @@ fn get_waypoints_fallback(
         }
     }
 
-    // Convert waypoints back to lat/lon
-    let mut waypoints_latlon = Vec::new();
-    let to_wgs84 =
-        Proj::new_known_crs("EPSG:2193", "EPSG:4326", None).expect("Failed to create projection");
+    let to_wgs84 = Proj::new_known_crs("EPSG:2193", "EPSG:4326", None)
+        .map_err(|e| format!("Failed to create WGS84 projection: {}", e))?;
 
+    let mut waypoints_latlon = Vec::new();
     for coord in waypoints {
-        let coverage_rect = generate_coverage_rect(&coord, &0.0, &perp_angle, drone);
+        let coverage_rect = generate_coverage_rect(&coord, &0.0, &perp_angle, drone)?;
         let (x, y) = to_wgs84
             .convert((coord.x, coord.y))
-            .expect("Cannot convert coords to wgs84");
+            .map_err(|e| format!("Cannot convert coords to WGS84: {}", e))?;
         waypoints_latlon.push(Waypoint {
             coverage_rect,
             position: [x, y],
@@ -505,7 +398,7 @@ fn get_waypoints_fallback(
         });
     }
 
-    waypoints_latlon
+    Ok(waypoints_latlon)
 }
 
 fn adjust_waypoint_for_slope(
@@ -517,77 +410,40 @@ fn adjust_waypoint_for_slope(
 ) -> Coord {
     let x = waypoint.x;
     let y = waypoint.y;
+    let pixel_size = geotransform[1].abs();
+    let sample_distance = pixel_size * 2.0;
 
-    // Calculate slope using finite differences
-    let pixel_size = geotransform[1].abs(); // assuming square pixels
-    let sample_distance = pixel_size * 2.0; // sample 2 pixels away
-
-    // Get elevations in 4 directions
     let elevations = [
-        get_elevation_at_point(
-            rasterband,
-            geotransform,
-            raster_size,
-            x + sample_distance,
-            y,
-        ),
-        get_elevation_at_point(
-            rasterband,
-            geotransform,
-            raster_size,
-            x - sample_distance,
-            y,
-        ),
-        get_elevation_at_point(
-            rasterband,
-            geotransform,
-            raster_size,
-            x,
-            y + sample_distance,
-        ),
-        get_elevation_at_point(
-            rasterband,
-            geotransform,
-            raster_size,
-            x,
-            y - sample_distance,
-        ),
+        get_elevation_at_point(rasterband, geotransform, raster_size, x + sample_distance, y),
+        get_elevation_at_point(rasterband, geotransform, raster_size, x - sample_distance, y),
+        get_elevation_at_point(rasterband, geotransform, raster_size, x, y + sample_distance),
+        get_elevation_at_point(rasterband, geotransform, raster_size, x, y - sample_distance),
     ];
 
     if let [Some(e_east), Some(e_west), Some(e_north), Some(e_south)] = elevations {
-        // Calculate partial derivatives (slope components)
         let dz_dx = (e_east - e_west) / (2.0 * sample_distance);
         let dz_dy = (e_north - e_south) / (2.0 * sample_distance);
-
-        // Vector in x-direction: (sample_distance, 0, dz_dx * sample_distance)
         let v_x = Vector3::new(sample_distance, 0.0, dz_dx * sample_distance);
-        // Vector in y-direction: (0, sample_distance, dz_dy * sample_distance)
         let v_y = Vector3::new(0.0, sample_distance, dz_dy * sample_distance);
-
         let normal = v_x.cross(&v_y);
 
         let normal_unit = match normal.try_normalize(1e-10) {
             Some(n) => n,
-            None => return waypoint, // Degenerate case (flat terrain)
+            None => return waypoint,
         };
 
         let vertical = Vector3::new(0.0, 0.0, 1.0);
-
-        let dot_product = normal_unit.dot(&vertical);
-        let dot_clamped = dot_product.clamp(-1.0, 1.0);
-        let slope_angle = dot_clamped.acos(); // angle from vertical
-
+        let dot_clamped = normal_unit.dot(&vertical).clamp(-1.0, 1.0);
+        let slope_angle = dot_clamped.acos();
         let horizontal_displacement = altitude * slope_angle.tan();
-
-        // Direction of displacement: project normal onto horizontal plane
         let horizontal_normal = Vector2::new(normal_unit.x, normal_unit.y);
+
         let horizontal_direction = match horizontal_normal.try_normalize(1e-10) {
             Some(dir) => dir,
-            None => return waypoint, // Normal is purely vertical
+            None => return waypoint,
         };
 
         let displacement = horizontal_displacement * horizontal_direction;
-
         Coord {
             x: x + displacement.x,
             y: y + displacement.y,
@@ -616,7 +472,8 @@ fn get_elevation_at_point(
     }
 
     let mut buffer = [0.0f32; 1];
-    match rasterband.read_into_slice::<f32>((pixel_x, pixel_y), (1, 1), (1, 1), &mut buffer, None) {
+    match rasterband.read_into_slice::<f32>((pixel_x, pixel_y), (1, 1), (1, 1), &mut buffer, None)
+    {
         Ok(_) => {
             let elevation = buffer[0] as f64;
             if (elevation - (-32767.0)).abs() < 0.1 {
@@ -629,32 +486,27 @@ fn get_elevation_at_point(
     }
 }
 
-/// Returns the ground coverage in meters of a photo taken from the drone
 fn get_ground_coverage(drone: &Drone) -> f64 {
     let fov_rad = drone.fov.to_radians();
     2.0 * drone.altitude * (fov_rad / 2.0).tan()
 }
 
-/// Convert Vec of coords in lat, lon to meters
-fn get_coord_meters(coords: &[&Coord]) -> Vec<Coord> {
+fn get_coord_meters(coords: &[&Coord]) -> Result<Vec<Coord>, String> {
+    let to_nztm = Proj::new_known_crs("EPSG:4326", "EPSG:2193", None)
+        .map_err(|e| format!("Failed to create NZTM projection: {}", e))?;
     let mut converted = Vec::new();
-    let to_nztm =
-        Proj::new_known_crs("EPSG:4326", "EPSG:2193", None).expect("Failed to create projection");
     for coord in coords {
         let (x, y) = to_nztm
             .convert((coord.x, coord.y))
-            .expect("Cannot convert coords to nztm");
-
+            .map_err(|e| format!("Cannot convert coord ({}, {}) to NZTM: {}", coord.x, coord.y, e))?;
         converted.push(Coord { x, y });
     }
-    converted
+    Ok(converted)
 }
 
-/// Returns the optimal angle of the lawnmover pattern based on the minimum rotated
-/// rectangle of the search area.
-fn get_lawnmower_angle(mbr_coords: &[&Coord]) -> f64 {
-    let to_nztm =
-        Proj::new_known_crs("EPSG:4326", "EPSG:2193", None).expect("Failed to create projection");
+fn get_lawnmower_angle(mbr_coords: &[&Coord]) -> Result<f64, String> {
+    let to_nztm = Proj::new_known_crs("EPSG:4326", "EPSG:2193", None)
+        .map_err(|e| format!("Failed to create NZTM projection: {}", e))?;
 
     let mut max_dist = 0.0;
     let mut longest_len_dx = 0.0;
@@ -663,14 +515,13 @@ fn get_lawnmower_angle(mbr_coords: &[&Coord]) -> f64 {
     for i in 0..mbr_coords.len() - 1 {
         let (x1, y1) = to_nztm
             .convert((mbr_coords[i].x, mbr_coords[i].y))
-            .expect("Cannot convert coords to nztm");
+            .map_err(|e| format!("Cannot convert MBR coord to NZTM: {}", e))?;
         let (x2, y2) = to_nztm
             .convert((mbr_coords[i + 1].x, mbr_coords[i + 1].y))
-            .expect("Cannot convert coords to nztm");
+            .map_err(|e| format!("Cannot convert MBR coord to NZTM: {}", e))?;
 
         let dx = x2 - x1;
         let dy = y2 - y1;
-
         let dist = (dx * dx + dy * dy).sqrt();
 
         if dist > max_dist {
@@ -680,5 +531,5 @@ fn get_lawnmower_angle(mbr_coords: &[&Coord]) -> f64 {
         }
     }
 
-    longest_len_dy.atan2(longest_len_dx)
+    Ok(longest_len_dy.atan2(longest_len_dx))
 }

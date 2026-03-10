@@ -24,11 +24,11 @@
   "bundle": {
     "resources": {
       "dlls/*": "./",
-      "resources/drone_list.json": "resources/",
+      "resources/drone_list.json": "./",
       "proj-data/*": "proj/"
     },
     "active": true,
-    "targets": "all",
+    "targets": "nsis",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
